@@ -2,9 +2,9 @@
 # Datasets
 DBP15k
 # Environment
-tensorflow 
-Python
-Numba
-Scipy
-Numpy
+tensorflow   
+Python  
+Numba  
+Scipy  
+Numpy  
 tqdm
