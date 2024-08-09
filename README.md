@@ -1,4 +1,4 @@
-# SUDA
+# Just run main.py
 # Datasets
 DBP15k
 # Environment
