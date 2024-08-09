@@ -23,18 +23,6 @@ def load_glove(pre_trained_txt):
     return word_vecs
 
 def get_ent_vec_char_vec(node_size, path, word_vecs):
-    #    load the pre-trained word embeddings
-    # please download the zip file from "http://nlp.stanford.edu/data/glove.6B.zip" and choose "glove.6B.300d.txt" as the word vectors.
-
-    # word_vecs = {}
-    # with open("glove.6B/glove.6B.300d.txt", encoding='UTF-8') as f:
-    #     for line in tqdm(f.readlines()):
-    #         line = line.split()
-    #         word_vecs[line[0]] = np.array([float(x) for x in line[1:]])
-
-
-    # load the translated entity names
-    # ent_names ；size N
     ent_names = json.load(
         open("translated_ent_name/"+path+".json", "r"))  # [ent_ids_1（中文）翻译后的实体名；ent_ids_2（英文）实体名]，字典类型，{id:[实体名分词]}
 
@@ -111,7 +99,6 @@ def get_ent_rel_vec(all_triples, ent_vec, ent_rel_vec=False):
             h_list = neibor_ent[i][0]  # 关系i的头实体id，list
             t_list = neibor_ent[i][1]  # 关系i的尾实体id，list
             if num_ent <= sample_ent:
-                # rel_vec[i] = np.sum(ent_vec[h_list]-ent_vec[t_list],axis= 0 ) / num_ent
                 rel_vec[i] = rel_vec[i] / np.linalg.norm(rel_vec[i])  # 行归一化,加0.1避免分母过小
             else:
                 index = np.random.choice(num_ent, size=sample_ent, replace=False)  # 采样
@@ -120,7 +107,6 @@ def get_ent_rel_vec(all_triples, ent_vec, ent_rel_vec=False):
                 rel_vec[i] = np.sum(ent_vec[slice_t] - ent_vec[slice_h], axis=0) / sample_ent
             if np.sum(rel_vec[i]) == 0:  # 若关系长度为0，随机生成均值为0的向量
                 rel_vec[i] = np.random.random(300) - 0.5
-            # rel_vec[i] = rel_vec[i] - np.mean(rel_vec[i] ) / np.std(rel_vec[i])    #行标准化
 
             rel_vec[i] = rel_vec[i] / np.linalg.norm(rel_vec[i])  # 行归一化
 
@@ -142,147 +128,12 @@ def get_ent_rel_vec(all_triples, ent_vec, ent_rel_vec=False):
                 ent_rel_vec[i] = ent_rel_vec[i] / np.linalg.norm(ent_rel_vec[i] + 0.1)  # 行归一化
             if np.sum(ent_rel_vec[i]) == 0:  # 若长度为0，随机生成均值为0的向量
                 ent_rel_vec[i] = np.random.random(300) - 0.5
-            # ent_rel_vec[i] = ent_rel_vec[i] - np.mean(ent_rel_vec[i])/ np.std(ent_rel_vec[i])  # 行标准化
             ent_rel_vec[i] = ent_rel_vec[i] / np.linalg.norm(ent_rel_vec[i])  # 行归一化
         return dr, neibor_rel, neibor_ent, ent_rel_vec
 
     else:
         return dr, neibor_rel, neibor_ent
 
-
-# #   dr: dictinary of r,记录包含关系r的三元组个数{r1_id:count_1,...,ri_id:count_i,...,}
-# dr = {}
-# for x, r, y in all_triples:
-#     if r not in dr:
-#         dr[r] = 0
-#     dr[r] += 1
-def get_sparse_rel_matrix_cipin(node_size, all_triples, dr, neibor_rel_count):
-    #   dr: dictinary of r,记录包含关系r的三元组个数{r1_id:count_1,...,ri_id:count_i,...,}
-    #   neibor_rel:生成每个节点的邻居关系矩阵[头实体id:[关系id1,...,关系idi...,]]
-    #   neibor_ent:生成每个关系的邻居关系矩阵[关系id:[头实体id1,...,头实体idi...,]，[尾实体id1,...,尾实体idi...,]]，不对实体进行去重
-    # dr = {}
-    # neibor_rel = {}
-    # neibor_ent = {}
-    # neibor_rel_count = {}
-    #
-    # for x, r, y in all_triples:
-    #     # if r not in dr:
-    #     #     dr[r] = 0
-    #     # dr[r] += 1
-    #     if x not in neibor_rel:
-    #         neibor_rel[x] = [r]
-    #     else:
-    #         neibor_rel[x].append(r)
-    #     if r not in neibor_ent:
-    #         neibor_ent[r] = [[x], [y]]
-    #     else:
-    #         neibor_ent[r][0].append(x)
-    #         neibor_ent[r][1].append(y)
-    #
-    # for ent in neibor_rel.keys():
-    #     count = Counter(neibor_rel[ent])
-    #     neibor_rel_count[ent] = dict(count)
-
-    sparse_rel_matrix = []
-    #度向量
-    degree = np.zeros(node_size)
-    for h, r, t in all_triples:
-        degree[h] = degree[h] + (neibor_rel_count[h][r] / sum(neibor_rel_count[h].values())) * np.log(
-            len(all_triples) / dr[r])
-    for i in range(len(degree)) :#度向量加入自环
-        degree[i] = degree[i] + np.log(len(all_triples) / node_size)
-
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i, np.log(len(all_triples) / node_size)/degree[i]])  # 加了自环无法保证列和为1
-
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, ( neibor_rel_count[h][r] / sum(neibor_rel_count[h].values()) ) * np.log(len(all_triples) / dr[r]) / degree[h]] )# 加了
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_standard(node_size, all_triples):
-    sparse_rel_matrix = []
-
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0])  #
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_standard_self(node_size, all_triples):
-    sparse_rel_matrix = []
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  1.0])  #
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0])  #
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_standard_circle(node_size, all_triples):
-    sparse_rel_matrix = []
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  2.0])  #
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0])  #
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_standard_self_prob(node_size, all_triples,neibor_rel_count):
-    sparse_rel_matrix = []
-    #度向量
-    degree = np.zeros(node_size)
-    # num_edges= np.zeros(node_size)
-
-    # for h, r, t in all_triples:
-    #     degree[h] = degree[h] + (neibor_rel_count[h][r] / sum(neibor_rel_count[h].values())) * np.log(
-    #         len(all_triples) / dr[r])
-    # for i in range(node_size):
-    #     degree[i] = degree[i] + sum(np.square(list(neibor_rel_count[i].values())))
-    for i in range(node_size):#每个实体的关系总数
-        degree[i] = sum(list(neibor_rel_count[i].values())) + 1.0 #自身
-
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  1.0/degree[i] ])  #
-
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0/degree[i] ])
-
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_standard_circle_prob(node_size, all_triples,neibor_rel_count):
-    sparse_rel_matrix = []
-    #度向量
-    degree= np.zeros(node_size)
-
-    for i in range(node_size):#每个实体的关系种类数
-        degree[i] =  sum(list(neibor_rel_count[i].values())) + 2  #+1表示自身
-
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  2.0/degree[i] ])  #
-
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0/degree[i] ])
-
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
 
 def get_sparse_matrix_rel(node_size, all_triples,neibor_rel_count):
     sparse_rel_matrix = []
@@ -304,113 +155,8 @@ def get_sparse_matrix_rel(node_size, all_triples,neibor_rel_count):
                                         dense_shape=(node_size, node_size))
     return sparse_rel_matrix
 
-def get_sparse_matrix_rel_Lap_prob(node_size, all_triples,neibor_rel_count):
-    """
-    Arel中将对角线设为0，行和为1
-    """
-    sparse_rel_matrix = []
-    num_edge_types= np.zeros(node_size)
-    for i in range(node_size):#每个实体的关系种类数
-        num_edge_types[i] =  len(list(neibor_rel_count[i].values()))
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  1.0 ])  #
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, -1.0/(num_edge_types[i] * neibor_rel_count[h][r] )])
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_rel_Lap(node_size, all_triples,neibor_rel_count):
-    """
-    Arel中将对角线设为0，,a_ij = N_i/l_ij 表示实体i的关系（边）总数除以关系r_ij在实体一阶邻域中的个数
-    """
-    sparse_rel_matrix = []
-    degrees= np.zeros(node_size)
-    for h, r, t in all_triples:
-        degrees[h] = degrees[h] + sum(list(neibor_rel_count[h].values()))/neibor_rel_count[h][r]
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  1.0 ])
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, -sum(list(neibor_rel_count[h].values()))/(neibor_rel_count[h][r]*np.sqrt(degrees[h])*np.sqrt(degrees[t]))])
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-def get_sparse_matrix_rel_sum(node_size, all_triples,neibor_rel_count):
-    sparse_rel_matrix = []
-
-    num_edge_types= np.zeros(node_size)
-
-    for i in range(node_size):#每个实体的关系总数
-        num_edge_types[i] = sum(list(neibor_rel_count[i].values())) + 1
-
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i,  1.0/num_edge_types[i] ])  #
-
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0/(num_edge_types[i] * neibor_rel_count[h][r] )])
-
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-# def get_sparse_rel_matrix_with_I_prob(node_size, all_triples):
-#     sparse_rel_matrix = []
-#     #度向量
-#     degree = np.zeros(node_size)
-#     for h, r, t in all_triples:
-#         degree[h] = degree[h] + 1.0
-#     for i in range(len(degree)) :#度向量加入自环
-#         degree[i] = degree[i] + 1.0
-#
-#     for i in range(node_size):
-#         sparse_rel_matrix.append([i, i, 1.0/degree[i]])  # 自环
-#     for h, r, t in all_triples:
-#         sparse_rel_matrix.append([h, t, 1.0/degree[i]])
-#
-#     sparse_rel_matrix = np.array(
-#         sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-#     sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-#                                         dense_shape=(node_size, node_size))
-#     return sparse_rel_matrix
-def get_sparse_matrix_unnormal_Lap(node_size, all_triples, neibor_rel_count):
-    """
-    W=Ast，Auplap = D-W
-    """
-    sparse_rel_matrix = []
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i, sum(list(neibor_rel_count[i].values())) ] )
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, -1.0])
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-
-def get_sparse_matrix_Lap(node_size, all_triples, neibor_rel_count):
-    """
-    W=Ast，Auplap = D-W
-    """
-    sparse_rel_matrix = []
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i, 1.0])
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, -1.0 /( np.sqrt(sum(list(neibor_rel_count[i].values()))) * np.sqrt(sum(list(neibor_rel_count[i].values())) )) ] )
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
 
 def get_sparse_matrix_SEU(node_size, all_triples, dr):
-    # 原文
     sparse_rel_matrix = []
     for i in range(node_size):
         sparse_rel_matrix.append([i, i, np.log(len(all_triples) / node_size)])  # 加了自环无法保证列和为1
@@ -421,69 +167,6 @@ def get_sparse_matrix_SEU(node_size, all_triples, dr):
     sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
                                         dense_shape=(node_size, node_size))
     return sparse_rel_matrix
-
-def get_sparse_rel_matrix_with_I(node_size, all_triples,):
-    sparse_rel_matrix = []
-    for i in range(node_size):
-        sparse_rel_matrix.append([i, i, 1.0])  # 加了自环无法保证列和为1
-    for h, r, t in all_triples:
-        sparse_rel_matrix.append([h, t, 1.0])  # 加了
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-
-
-
-def get_sparse_rel_matrix_paper(node_size, all_triples, neibor_rel, dr, self_ring=True):
-    # 原论文，加入实体一阶邻居的关系
-    sparse_rel_matrix = []
-    if self_ring:
-        for i in range(node_size):
-            # sparse_rel_matrix.append([i, i, 1.0])
-            sparse_rel_matrix.append([i, i, np.log(len(all_triples) / node_size)])
-    for h, r, t in all_triples:
-        # h的一阶邻居与h的关系,h_rel记录h与一阶邻居的关系在整个三元组中出现的次数，h_rel=[count1,...,]
-        h_rel = []
-        for i in neibor_rel[h]:
-            h_rel.append(dr[i])
-        sparse_rel_matrix.append(
-            [h, t, np.log(len(all_triples) / np.sum(np.log(len(all_triples) / np.array(h_rel))))])  # 行和为1
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-
-def get_sparse_rel_matrix_alpha(node_size, all_triples, dr, neibor_rel, alpha):
-    sparse_rel_matrix = []
-    # alpha =  0.5
-    # for i in range(node_size):
-    #     sparse_rel_matrix.append([i, i, alpha])  # 加了自环 zti
-    for h, r, t in all_triples:
-        # h的一阶邻居与h的关系,h_rel记录h与一阶邻居的关系在整个三元组中出现的次数，h_rel=[count1,...,]
-        h_rel = []
-        for i in neibor_rel[h]:
-            h_rel.append(dr[i])
-        sparse_rel_matrix.append(
-            [h, t, (1 - alpha) * np.log(len(all_triples) / np.sum(np.log(len(all_triples) / np.array(h_rel))))])  # 行和为1
-    # ##加入alpha*I
-    # for i in range(node_size):
-    #     sparse_rel_matrix.append([i, i, 0.2]) # 加了自环无法保证列和为1
-    # for h, r, t in all_triples:
-    #     sparse_rel_matrix.append([h, t, 0.8*np.log(len(all_triples) / dr[r])])  # 加了
-
-    sparse_rel_matrix = np.array(
-        sorted(sparse_rel_matrix, key=lambda x: x[0]))  # 将sparse_rel_matrix按第0维索引排序，即按entity_id排序
-    sparse_rel_matrix = tf.SparseTensor(indices=sparse_rel_matrix[:, :2], values=sparse_rel_matrix[:, 2],
-                                        dense_shape=(node_size, node_size))
-    return sparse_rel_matrix
-
-
-## %%     feature selection
 
 def get_feature(ent_vec, char_vec):
     mode = "hybrid-level"
@@ -499,9 +182,6 @@ def get_feature(ent_vec, char_vec):
     # feature = (feature-np.mean(feature,axis=0))/np.std(feature,axis=0)   #按行归一化
 
     return feature
-
-
-## %%     #choose the graph depth L and feature propagation
 
 
 def cal_sims(test_pair, feature, indices_1, indices_2):
@@ -545,17 +225,7 @@ def get_sims(sparse_rel_matrix, feature, test_pair, indices_1, indices_2, pad=Tr
         pad = np.zeros((n - m, n))
         sims = np.concatenate((sims, pad), axis=0)  # 列不变，上下拼接
     return sims
-
-
-#
-# def shuffer_data(test_pair, unmatch1, unmatch2):
-#     align_index_1 =  np.arange( 1,len( test_pair[:, 0] ) + 1 )
-#     align_index_2 = np.arange(1, len( test_pair[:, 1] ) + 1 )
-#     unmatch_index_1 = np.zeros( len(unmatch1) ).astype(int)
-#     unmatch_index_2 = np.zeros( len(unmatch2) ).astype(int)
-#     ent_align_index_1 = list(zip( test_pair[:,0], align_index_1 ))
-#     ent_dang_index_1 = list(zip( test_pair[:,1], unmatch_index_1 ))
-#
+ 
 
 def detect_dangling(sims, k, path ):
     """
@@ -836,51 +506,20 @@ if __name__ == '__main__':
                 feature = get_feature(ent_vec, char_vec)
 
 
-                if Amode =='standard':
-                    sparse_rel_matrix = get_sparse_matrix_standard(node_size, all_triples)
-                if Amode =='standard_self':
-                    sparse_rel_matrix = get_sparse_matrix_standard_self(node_size, all_triples)
-                if Amode =='standard_circle':
-                    sparse_rel_matrix = get_sparse_matrix_standard_circle(node_size, all_triples)
-                if Amode =='standard_self_prob':
-                    sparse_rel_matrix = get_sparse_matrix_standard_self_prob(node_size, all_triples,neibor_rel_count)
-                if Amode =='standard_circle_prob':
-                    sparse_rel_matrix = get_sparse_matrix_standard_circle_prob(node_size, all_triples,neibor_rel_count)
                 if Amode =='SEU':
                     sparse_rel_matrix = get_sparse_matrix_SEU(node_size, all_triples, dr)
                 if Amode =='rel':
                     sparse_rel_matrix = get_sparse_matrix_rel(node_size, all_triples,neibor_rel_count)
-                if Amode == 'rel_sum':
-                    sparse_rel_matrix = get_sparse_matrix_rel_sum(node_size, all_triples, neibor_rel_count)
-                if Amode == 'standard_unnormal_laplace':
-                    sparse_rel_matrix = get_sparse_matrix_unnormal_Lap(node_size, all_triples, neibor_rel_count)
-                if Amode == 'standard_laplace':
-                    sparse_rel_matrix = get_sparse_matrix_Lap(node_size, all_triples, neibor_rel_count)
-                if Amode == 'rel_lap':
-                    sparse_rel_matrix = get_sparse_matrix_rel_Lap(node_size, all_triples, neibor_rel_count)
+          
 
                 # sparse_rel_matrix = get_sparse_rel_matrix_orig(node_size, all_triples, dr)
                 start1 = time.time()
                 sims = get_sims(sparse_rel_matrix, feature, test_pair, indices_1, indices_2, pad=False)
 
 
-                # print("feature propagation time is: ", str(end1 - start1))
-
-                #悬挂实体检测
+                #悬空实体检测
                 pre_label_1, pre_label_2,df_1,df_2 = detect_dangling1(sims, k=k , path = path)
-                # if path == 'dbp_zh_en':
-                #     datablock = np.concatenate((df_s_t, df_t_s), axis=1)
-                #     df_t_s.to_excel(excel_writer=writer ,startrow= 2,startcol= 2, index = False)
-                #     df_s_t.to_excel(excel_writer=writer, startrow= 2,startcol= 5, index=False)
-                #     writer.close()
-                # if path == 'dbp_fr_en':
-                #     df_t_s.to_excel(excel_writer=writer, startrow=2, startcol=8, index=False)
-                #     df_s_t.to_excel(excel_writer=writer, startrow= 2,startcol= 11, index=False)
-                #     writer.close()
-                # if path == 'dbp_ja_en':
-                #     df_t_s.to_excel(excel_writer=writer,startrow=2, startcol=14, index=False)
-                #     df_s_t.to_excel(excel_writer=writer, startrow=2, startcol=17, index=False)
-                #     writer.close()
+        
                 datablock = np.concatenate((df_1, df_2), axis=1)
                 print("k=%s A=%s %s 悬挂实体检测" % (k, Amode, path ) + '完成')
 
@@ -889,9 +528,7 @@ if __name__ == '__main__':
                 else:
                     danglingresult = np.concatenate((danglingresult, datablock), axis=1)
 
-
-                # print(path,'KG1:')
-                #删除悬挂节点
+                #删除悬空实体
                 subsims, alig_ent_id_1, alig_ent_id_2 = entity_align( pre_label_1, pre_label_2, indices_1, indices_2 )
                 end1 = time.time()
                 print("悬空实体检测计算时间",end1-start1 )
